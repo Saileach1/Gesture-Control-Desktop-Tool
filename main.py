@@ -68,6 +68,9 @@ class GestureController:
         # 外部控制开关回调函数（可选）
         self.enable_control_callback = None
 
+        # 跟踪上一个手势，避免连续触发相同的动作
+        self.previous_gesture = None
+
     def get_available_cameras(self):
         """获取系统中可用的摄像头列表"""
         available_cameras = []
@@ -133,14 +136,18 @@ class GestureController:
             if cv2.contourArea(hand_contour) > 10000:  # 过滤小的轮廓
                 # 绘制手部轮廓
                 cv2.drawContours(display_frame, [hand_contour], -1, (0, 255, 0), 2)
-                
+
                 # 识别手势
                 gesture = self.get_gesture_legacy(hand_contour, frame)
-                
+
                 # 执行手势对应的操作
                 if gesture and self.is_controlling:
                     self.execute_gesture_command_legacy(gesture, frame)
-        
+
+        # 如果没有检测到手势，也要更新 previous_gesture
+        if gesture is None:
+            self.previous_gesture = None
+
         return display_frame, gesture
 
     def get_gesture_legacy(self, hand_contour, frame):
@@ -287,17 +294,24 @@ class GestureController:
                         pyautogui.rightClick()
             
         elif gesture == 'victory':  # 胜利手势 - 双击
-            # 延迟双击，使操作更平滑
-            pyautogui.doubleClick(interval=0.3)  # 增加双击间隔时间
-            
+            # 检查是否与上一个手势相同，避免连续双击
+            if self.previous_gesture != 'victory':
+                # 延迟双击，使操作更平滑
+                pyautogui.doubleClick(interval=0.3)  # 增加双击间隔时间
+
         elif gesture == 'thumb_up':  # 竖大拇指向上 - 向上滚动
             pyautogui.scroll(10)  # 滚动量
-            
+
         elif gesture == 'thumb_down':  # 竖大拇指向下 - 向下滚动
             pyautogui.scroll(-10)  # 滚动量
-            
+
         elif gesture == 'ok_gesture':  # OK手势 - 右键单击
-            pyautogui.rightClick()
+            # 检查是否与上一个手势相同，避免连续右键单击
+            if self.previous_gesture != 'ok_gesture':
+                pyautogui.rightClick()
+
+        # 更新上一个手势
+        self.previous_gesture = gesture
 
     def calculate_distance(self, point1, point2):
         """计算两点之间的距离"""
@@ -501,6 +515,10 @@ class GestureController:
                 if gesture and self.is_controlling and enable_control:
                     self.execute_gesture_command(gesture, landmarks, frame.shape[1], frame.shape[0])
 
+        # 如果没有检测到手势，也要更新 previous_gesture
+        if gesture is None:
+            self.previous_gesture = None
+
         return display_frame, gesture
 
     def smooth_mouse_move(self, target_x, target_y):
@@ -556,11 +574,15 @@ class GestureController:
             self.smooth_mouse_move(x, y)
 
         elif gesture == 'open_palm':  # 张开手掌 - 单击
-            pyautogui.click()
+            # 检查是否与上一个手势相同，避免连续点击
+            if self.previous_gesture != 'open_palm':
+                pyautogui.click()
 
         elif gesture == 'victory':  # 胜利手势 - 双击
-            # 延迟双击，使操作更平滑
-            pyautogui.doubleClick(interval=0.5)  # 增加双击间隔时间，进一步平滑操作
+            # 检查是否与上一个手势相同，避免连续双击
+            if self.previous_gesture != 'victory':
+                # 延迟双击，使操作更平滑
+                pyautogui.doubleClick(interval=0.5)  # 增加双击间隔时间，进一步平滑操作
 
         elif gesture == 'thumb_up':  # 竖大拇指向上 - 向上滚动
             pyautogui.scroll(10)  # 滚动量
@@ -569,60 +591,76 @@ class GestureController:
             pyautogui.scroll(-10)  # 滚动量
 
         elif gesture == 'ok_gesture':  # OK手势 - 右键单击
-            pyautogui.rightClick()
+            # 检查是否与上一个手势相同，避免连续右键单击
+            if self.previous_gesture != 'ok_gesture':
+                pyautogui.rightClick()
+
+        # 更新上一个手势
+        self.previous_gesture = gesture
 
     def execute_gesture_command_for_legacy(self, gesture, frame):
         """为传统方法执行手势命令"""
         if gesture == 'point_up':  # 食指上指 - 鼠标移动和单击
-            # 使用轮廓的重心作为鼠标位置
-            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-            blurred = cv2.GaussianBlur(gray, (35, 35), 0)
-            _, thresh = cv2.threshold(blurred, 127, 255, cv2.THRESH_BINARY)
-            contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-            
-            if contours:
-                hand_contour = max(contours, key=cv2.contourArea)
-                if hand_contour is not None:
-                    M = cv2.moments(hand_contour)
-                    if M["m00"] != 0:
-                        cx = int(M["m10"] / M["m00"])
-                        cy = int(M["m01"] / M["m00"])
-                        
-                        # 将坐标映射到屏幕尺寸
-                        screen_width, screen_height = pyautogui.size()
-                        x = int((cx / frame.shape[1]) * screen_width)
-                        y = int((cy / frame.shape[0]) * screen_height)
-                        
-                        # 限制在屏幕范围内
-                        x = max(0, min(x, screen_width - 1))
-                        y = max(0, min(y, screen_height - 1))
-                        
-                        # 移动鼠标
-                        pyautogui.moveTo(x, y, duration=0.1)
-                        
-                        # 模拟点击
-                        pyautogui.click()
-            
+            # 检查是否与上一个手势相同，避免连续点击
+            if self.previous_gesture != 'point_up':
+                # 使用轮廓的重心作为鼠标位置
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                blurred = cv2.GaussianBlur(gray, (35, 35), 0)
+                _, thresh = cv2.threshold(blurred, 127, 255, cv2.THRESH_BINARY)
+                contours, _ = cv2.findContours(thresh.copy(), cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+
+                if contours:
+                    hand_contour = max(contours, key=cv2.contourArea)
+                    if hand_contour is not None:
+                        M = cv2.moments(hand_contour)
+                        if M["m00"] != 0:
+                            cx = int(M["m10"] / M["m00"])
+                            cy = int(M["m01"] / M["m00"])
+
+                            # 将坐标映射到屏幕尺寸
+                            screen_width, screen_height = pyautogui.size()
+                            x = int((cx / frame.shape[1]) * screen_width)
+                            y = int((cy / frame.shape[0]) * screen_height)
+
+                            # 限制在屏幕范围内
+                            x = max(0, min(x, screen_width - 1))
+                            y = max(0, min(y, screen_height - 1))
+
+                            # 移动鼠标
+                            pyautogui.moveTo(x, y, duration=0.1)
+
+                            # 模拟点击
+                            pyautogui.click()
+
         elif gesture == 'victory':  # 胜利手势 - 双击
-            # 延迟双击，使操作更平滑
-            pyautogui.doubleClick(interval=0.5)  # 增加双击间隔时间，进一步平滑操作
-            
+            # 检查是否与上一个手势相同，避免连续双击
+            if self.previous_gesture != 'victory':
+                # 延迟双击，使操作更平滑
+                pyautogui.doubleClick(interval=0.5)  # 增加双击间隔时间，进一步平滑操作
+
         elif gesture == 'thumb_up':  # 竖大拇指向上 - 向上滚动
             pyautogui.scroll(10)  # 滚动量
-            
+
         elif gesture == 'thumb_down':  # 竖大拇指向下 - 向下滚动
             pyautogui.scroll(-10)  # 滚动量
-            
+
         elif gesture == 'ok_gesture':  # OK手势 - 右键单击
-            pyautogui.rightClick()
+            # 检查是否与上一个手势相同，避免连续右键单击
+            if self.previous_gesture != 'ok_gesture':
+                pyautogui.rightClick()
+
+        # 更新上一个手势
+        self.previous_gesture = gesture
 
     def start_control(self):
         """开始手势控制"""
         self.is_controlling = True
+        self.previous_gesture = None  # 重置上一个手势
         
     def stop_control(self):
         """停止手势控制"""
         self.is_controlling = False
+        self.previous_gesture = None  # 重置上一个手势
 
     def run_camera(self):
         """运行摄像头并进行手势识别"""
@@ -673,6 +711,7 @@ class GestureController:
                 break
             elif key == ord(' '):
                 self.is_controlling = not self.is_controlling
+                self.previous_gesture = None  # 重置上一个手势
                 print(f"Control toggled: {'ACTIVE' if self.is_controlling else 'PAUSED'}")  # 调试输出
 
         cap.release()
